@@ -14,7 +14,7 @@ type CacheHandler struct {
 var _ http.Handler = (*CacheHandler)(nil)
 
 func (ch *CacheHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	// TODO: Handle errors in this funciton completly
+	// TODO
 	if ch.tryCache(r) {
 		if resp, err := ch.fetch(r); err == nil {
 			w.WriteHeader(resp.StatusCode)
@@ -26,6 +26,8 @@ func (ch *CacheHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			io.Copy(w, resp.Body)
 			return
 		}
+		// Set cache here
+		// ...
 	}
 	ch.Handler.ServeHTTP(w, r)
 }

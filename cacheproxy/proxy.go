@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"strings"
 )
 
 var DefaultNavaakCache *navaakCache
@@ -27,8 +28,10 @@ type NavaakURLs struct {
 type navaakCache struct {
 	NavaakURL       url.URL
 	NavaakStreamURL url.URL
-	reverseProxy    *httputil.ReverseProxy
-	cacher          *CacheHandler
+
+	reverseProxy *httputil.ReverseProxy
+	jsInjector   *JavascriptInjector
+	cacher       *CacheHandler
 }
 
 func NewNavaakCache(urls NavaakURLs) (*navaakCache, error) {
@@ -49,10 +52,17 @@ func NewNavaakCache(urls NavaakURLs) (*navaakCache, error) {
 	nc.reverseProxy = &httputil.ReverseProxy{
 		Director: nc.reverseProxyDirector,
 	}
+
+	nc.jsInjector = (&JavascriptInjector{
+		Handler: nc.reverseProxy,
+	}).LoadFile("./cacheproxy/xhr_redefine.js")
+
 	nc.cacher = &CacheHandler{
-		Handler:  nc.reverseProxy,
+		Cache:    nopCacher{},
+		Handler:  nc.jsInjector,
 		TryCache: nc.tryCache,
 	}
+
 	return nc, nil
 }
 
@@ -61,11 +71,21 @@ func (nc *navaakCache) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (nc *navaakCache) reverseProxyDirector(req *http.Request) {
+	host := req.Host
+	if len(host) <= 0 {
+		host = req.URL.Host
+	}
 	req.Host = ""
 	req.URL.Scheme = nc.NavaakURL.Scheme
-	req.URL.Host = nc.NavaakURL.Host
+	parts := strings.Split(host, ".")
+	parts[len(parts)-1] = nc.NavaakURL.Host
+	req.URL.Host = strings.Join(parts, ".")
+	// TODO: already we dont accept encoding (e.g. gzip)
+	// and our js injector expect plain stream.
+	req.Header.Del("Accept-Encoding")
 }
 
-func (nc *navaakCache) tryCache(*http.Request) bool {
-	return false
+func (nc *navaakCache) tryCache(req *http.Request) bool {
+	// Try to cache stream.navaak.com
+	return req.URL.Host == nc.NavaakStreamURL.Host
 }
