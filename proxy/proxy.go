@@ -11,21 +11,24 @@ var DefaultNavaakCache *navaakCache
 
 func init() {
 	var err error
-	DefaultNavaakCache, err = NewNavaakCache(NavaakURLs{
-		Default: "https://navaak.com",
-		Stream:  "https://stream.navaak.com",
+	DefaultNavaakCache, err = NewNavaakCache(Configs{
+		LocalAddr: "localhost:8000",
+		URL:       "https://navaak.com",
+		Stream:    "https://stream.navaak.com",
 	})
 	if err != nil {
 		panic(err)
 	}
 }
 
-type NavaakURLs struct {
-	Default string
-	Stream  string
+type Configs struct {
+	LocalAddr string
+	URL       string
+	Stream    string
 }
 
 type navaakCache struct {
+	LocalAddr       string
 	NavaakURL       url.URL
 	NavaakStreamURL url.URL
 
@@ -34,16 +37,18 @@ type navaakCache struct {
 	cacher       *cacheHandler
 }
 
-func NewNavaakCache(urls NavaakURLs) (*navaakCache, error) {
+func NewNavaakCache(confs Configs) (*navaakCache, error) {
 	nc := &navaakCache{}
 
-	u, err := url.Parse(urls.Default)
+	nc.LocalAddr = confs.LocalAddr
+
+	u, err := url.Parse(confs.URL)
 	if err != nil {
 		return nil, err
 	}
 	nc.NavaakURL = *u
 
-	u, err = url.Parse(urls.Default)
+	u, err = url.Parse(confs.URL)
 	if err != nil {
 		return nil, err
 	}
@@ -55,7 +60,9 @@ func NewNavaakCache(urls NavaakURLs) (*navaakCache, error) {
 
 	nc.jsInjector = (&javascriptInjector{
 		Handler: nc.reverseProxy,
-	}).loadFile("./cacheproxy/xhr_redefine.js")
+	}).loadFile("./proxy/xhr_redefine.js", map[string]string{
+		"PROXY_ADDR": "'" + nc.LocalAddr + "'",
+	})
 
 	nc.cacher = &cacheHandler{
 		cache:       nopCacher{},

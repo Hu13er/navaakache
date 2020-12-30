@@ -57,12 +57,15 @@ func (jsi *javascriptInjector) ServeHTTP(w http.ResponseWriter, r *http.Request)
 	resp.writeResponse(w)
 }
 
-func (jsi *javascriptInjector) loadFile(filename string) *javascriptInjector {
+func (jsi *javascriptInjector) loadFile(filename string, m map[string]string) *javascriptInjector {
 	js, err := ioutil.ReadFile(filename)
 	if err != nil {
 		panic(err)
 	}
 	jsi.JSCode = string(js)
+	for k, v := range m {
+		jsi.JSCode = strings.ReplaceAll(jsi.JSCode, "$"+k+"$", v)
+	}
 	return jsi
 }
 
