@@ -1,4 +1,4 @@
-package cacheproxy
+package proxy
 
 import (
 	"net/http"
@@ -30,8 +30,8 @@ type navaakCache struct {
 	NavaakStreamURL url.URL
 
 	reverseProxy *httputil.ReverseProxy
-	jsInjector   *JavascriptInjector
-	cacher       *CacheHandler
+	jsInjector   *javascriptInjector
+	cacher       *cacheHandler
 }
 
 func NewNavaakCache(urls NavaakURLs) (*navaakCache, error) {
@@ -53,14 +53,14 @@ func NewNavaakCache(urls NavaakURLs) (*navaakCache, error) {
 		Director: nc.reverseProxyDirector,
 	}
 
-	nc.jsInjector = (&JavascriptInjector{
+	nc.jsInjector = (&javascriptInjector{
 		Handler: nc.reverseProxy,
-	}).LoadFile("./cacheproxy/xhr_redefine.js")
+	}).loadFile("./cacheproxy/xhr_redefine.js")
 
-	nc.cacher = &CacheHandler{
-		Cache:    nopCacher{},
-		Handler:  nc.jsInjector,
-		TryCache: nc.tryCache,
+	nc.cacher = &cacheHandler{
+		cache:       nopCacher{},
+		handler:     nc.jsInjector,
+		tryForCache: nc.tryCache,
 	}
 
 	return nc, nil
