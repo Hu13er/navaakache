@@ -5,16 +5,23 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"strings"
+
+	"github.com/Hu13er/navaakache/cache"
 )
 
 var DefaultNavaakCache *navaakCache
 
 func init() {
-	var err error
+	// var err error
+	c, err := cache.NewCacheGo()
+	if err != nil {
+		panic(err)
+	}
 	DefaultNavaakCache, err = NewNavaakCache(Configs{
 		LocalAddr: "localhost:8000",
 		URL:       "https://navaak.com",
 		Stream:    "https://stream.navaak.com",
+		Cacher:    c,
 	})
 	if err != nil {
 		panic(err)
@@ -25,16 +32,18 @@ type Configs struct {
 	LocalAddr string
 	URL       string
 	Stream    string
+	Cacher    cache.Cacher
 }
 
 type navaakCache struct {
 	LocalAddr       string
 	NavaakURL       url.URL
 	NavaakStreamURL url.URL
+	Cacher          cache.Cacher
 
-	reverseProxy *httputil.ReverseProxy
-	jsInjector   *javascriptInjector
-	cacher       *cacheHandler
+	reverseProxy  *httputil.ReverseProxy
+	jsInjector    *javascriptInjector
+	cacherHandler *cacheHandler
 }
 
 func NewNavaakCache(confs Configs) (*navaakCache, error) {
@@ -54,6 +63,8 @@ func NewNavaakCache(confs Configs) (*navaakCache, error) {
 	}
 	nc.NavaakStreamURL = *u
 
+	nc.Cacher = confs.Cacher
+
 	nc.reverseProxy = &httputil.ReverseProxy{
 		Director: nc.reverseProxyDirector,
 	}
@@ -64,8 +75,10 @@ func NewNavaakCache(confs Configs) (*navaakCache, error) {
 		"PROXY_ADDR": "'" + nc.LocalAddr + "'",
 	})
 
-	nc.cacher = &cacheHandler{
-		cache:       nopCacher{},
+	nc.cacherHandler = &cacheHandler{
+		requestCacher: &streamCacher{
+			backend: nc.Cacher,
+		},
 		handler:     nc.jsInjector,
 		tryForCache: nc.tryCache,
 	}
@@ -74,7 +87,7 @@ func NewNavaakCache(confs Configs) (*navaakCache, error) {
 }
 
 func (nc *navaakCache) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	nc.cacher.ServeHTTP(w, r)
+	nc.cacherHandler.ServeHTTP(w, r)
 }
 
 func (nc *navaakCache) reverseProxyDirector(req *http.Request) {
@@ -93,6 +106,10 @@ func (nc *navaakCache) reverseProxyDirector(req *http.Request) {
 }
 
 func (nc *navaakCache) tryCache(req *http.Request) bool {
-	// Try to cache stream.navaak.com
-	return req.URL.Host == nc.NavaakStreamURL.Host
+	// Try to cache stream.localhost:8000
+	host := req.Host
+	if len(host) <= 0 {
+		host = req.URL.Host
+	}
+	return strings.HasPrefix(host, "stream.")
 }
